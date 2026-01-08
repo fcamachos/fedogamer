@@ -31,9 +31,9 @@ fi
 install_zenity() {
     echo -e "${YELLOW}Instalando zenity...${NC}"
     case "$DISTRO" in
-        fedora) sudo dnf install -y zenity ;;
-        debian) sudo apt update && sudo apt install -y zenity ;;
-        arch)   sudo pacman -S --needed --noconfirm zenity ;;
+        fedora) pkexec dnf install -y zenity ;;
+        debian) pkexec apt update && pkexec apt install -y zenity ;;
+        arch)   pkexec pacman -S --needed --noconfirm zenity ;;
     esac
 }
 
@@ -104,7 +104,7 @@ show_question() {
 }
 
 # Bienvenida
-show_info "<b>¡Bienvenido al instalador gaming para Linux!</b>\n\nEste script prepara tu sistema para jugar con <b>Steam</b> y <b>Lutris</b>, e incluye codecs multimedia para reproducir MP4, MP3, etc.\n\nDistribución detectada: <b>$DISTRO</b>\n\n<i>Requiere conexión a internet y privilegios sudo.</i>"
+show_info "<b>¡Bienvenido al instalador gaming para Linux!</b>\n\nEste script prepara tu sistema para jugar con <b>Steam</b> y <b>Lutris</b>, e incluye codecs multimedia para reproducir MP4, MP3, etc.\n\nDistribución detectada: <b>$DISTRO</b>\n\n<i>Requiere conexión a internet y privilegios pkexec.</i>"
 
 # Checklist principal (solo con zenity; fallback texto instala todo por defecto)
 if [[ "$DIALOG" == "zenity" ]]; then
@@ -142,18 +142,18 @@ setup_repositories() {
     show_info "Configurando repositorios adicionales..."
     case "$DISTRO" in
         fedora)
-            sudo dnf install -y https://mirrors.rpmfusion.org/free/fedora/rpmfusion-free-release-$(rpm -E %fedora).noarch.rpm
-            sudo dnf install -y https://mirrors.rpmfusion.org/nonfree/fedora/rpmfusion-nonfree-release-$(rpm -E %fedora).noarch.rpm
+            pkexec dnf install -y https://mirrors.rpmfusion.org/free/fedora/rpmfusion-free-release-$(rpm -E %fedora).noarch.rpm
+            pkexec dnf install -y https://mirrors.rpmfusion.org/nonfree/fedora/rpmfusion-nonfree-release-$(rpm -E %fedora).noarch.rpm
             flatpak remote-add --if-not-exists flathub https://flathub.org/repo/flathub.flatpakrepo
             ;;
         debian)
-            sudo sed -i 's/main$/main contrib non-free non-free-firmware/' /etc/apt/sources.list
-            sudo apt update
+            pkexec sed -i 's/main$/main contrib non-free non-free-firmware/' /etc/apt/sources.list
+            pkexec apt update
             ;;
         arch)
             if ! grep -q "^\[multilib\]" /etc/pacman.conf; then
-                echo -e "\n[multilib]\nInclude = /etc/pacman.d/mirrorlist" | sudo tee -a /etc/pacman.conf
-                sudo pacman -Sy
+                echo -e "\n[multilib]\nInclude = /etc/pacman.d/mirrorlist" | pkexec tee -a /etc/pacman.conf
+                pkexec pacman -Sy
             fi
             ;;
     esac
@@ -162,17 +162,17 @@ setup_repositories() {
 install_wine() {
     show_info "Instalando Wine y Winetricks..."
     case "$DISTRO" in
-        fedora) sudo dnf install -y wine winetricks ;;
-        debian) sudo apt install -y --install-recommends winehq-stable winetricks ;;
-        arch)   sudo pacman -S --needed wine wine-gecko wine-mono winetricks ;;
+        fedora) pkexec dnf install -y wine winetricks ;;
+        debian) pkexec apt install -y --install-recommends winehq-stable winetricks ;;
+        arch)   pkexec pacman -S --needed wine wine-gecko wine-mono winetricks ;;
     esac
 }
 
 install_lutris() {
     show_info "Instalando Lutris..."
     case "$DISTRO" in
-        fedora|debian) sudo ${DISTRO/dnf/apt install} -y lutris ;;
-        arch)          sudo pacman -S --needed lutris ;;
+        fedora|debian) pkexec ${DISTRO/dnf/apt install} -y lutris ;;
+        arch)          pkexec pacman -S --needed lutris ;;
     esac
 }
 
@@ -180,15 +180,15 @@ install_graphics_libraries() {
     show_info "Instalando drivers gráficos y herramientas gaming..."
     case "$DISTRO" in
         fedora)
-            sudo dnf install -y mesa-vulkan-drivers vulkan-loader vulkan-tools gamemode mangohud dxvk steam-devices
+            pkexec dnf install -y mesa-vulkan-drivers vulkan-loader vulkan-tools gamemode mangohud dxvk steam-devices
             ;;
         debian)
-            sudo dpkg --add-architecture i386
-            sudo apt update
-            sudo apt install -y mesa-vulkan-drivers vulkan-tools gamemode mangohud
+            pkexec dpkg --add-architecture i386
+            pkexec apt update
+            pkexec apt install -y mesa-vulkan-drivers vulkan-tools gamemode mangohud
             ;;
         arch)
-            sudo pacman -S --needed lib32-mesa vulkan-icd-loader lib32-vulkan-icd-loader gamemode lib32-gamemode mangohud lib32-mangohud
+            pkexec pacman -S --needed lib32-mesa vulkan-icd-loader lib32-vulkan-icd-loader gamemode lib32-gamemode mangohud lib32-mangohud
             ;;
     esac
 }
@@ -196,9 +196,9 @@ install_graphics_libraries() {
 install_wine_dependencies() {
     show_info "Instalando bibliotecas 32-bit esenciales..."
     case "$DISTRO" in
-        fedora) sudo dnf install -y glibc.i686 libstdc++.i686 alsa-lib.i686 pulseaudio-libs.i686 cabextract ;;
-        debian) sudo apt install -y libc6:i386 libstdc++6:i386 cabextract ;;
-        arch)   sudo pacman -S --needed lib32-glibc lib32-gcc-libs lib32-alsa-lib cabextract ;;
+        fedora) pkexec dnf install -y glibc.i686 libstdc++.i686 alsa-lib.i686 pulseaudio-libs.i686 cabextract ;;
+        debian) pkexec apt install -y libc6:i386 libstdc++6:i386 cabextract ;;
+        arch)   pkexec pacman -S --needed lib32-glibc lib32-gcc-libs lib32-alsa-lib cabextract ;;
     esac
 }
 
@@ -206,38 +206,38 @@ install_gaming_tools() {
     show_info "Instalando Steam y herramientas adicionales..."
     case "$DISTRO" in
         fedora)
-            sudo dnf install -y steam discord
+            pkexec dnf install -y steam discord
             flatpak install -y flathub com.heroicgameslauncher.hgl net.davidotek.pupgui2
             ;;
-        debian) sudo apt install -y steam ;;
-        arch)   sudo pacman -S --needed steam discord ;;
+        debian) pkexec apt install -y steam ;;
+        arch)   pkexec pacman -S --needed steam discord ;;
     esac
 }
 
 configure_system_optimizations() {
     show_info "Aplicando optimizaciones del sistema..."
-    sudo groupadd -r gamemode 2>/dev/null || true
-    sudo usermod -aG gamemode "$USER"
+    pkexec groupadd -r gamemode 2>/dev/null || true
+    pkexec usermod -aG gamemode "$USER"
 }
 
 install_multimedia_codecs() {
     show_info "Instalando codecs multimedia (MP4, MP3, MKV, etc.)..."
     case "$DISTRO" in
         fedora)
-            sudo dnf swap ffmpeg-free ffmpeg --allowerasing -y
-            sudo dnf install -y gstreamer1-plugins-{bad-\*,good-\*,base,ugly-\*} gstreamer1-plugin-openh264 gstreamer1-libav ffmpeg lame-libs
-            sudo dnf group upgrade --with-optional Multimedia -y
+            pkexec dnf swap ffmpeg-free ffmpeg --allowerasing -y
+            pkexec dnf install -y gstreamer1-plugins-{bad-\*,good-\*,base,ugly-\*} gstreamer1-plugin-openh264 gstreamer1-libav ffmpeg lame-libs
+            pkexec dnf group upgrade --with-optional Multimedia -y
             ;;
         debian)
-            sudo apt update
+            pkexec apt update
             if command -v ubuntu-drivers >/dev/null 2>&1; then
-                sudo apt install -y ubuntu-restricted-extras
+                pkexec apt install -y ubuntu-restricted-extras
             else
-                sudo apt install -y gstreamer1.0-plugins-bad gstreamer1.0-plugins-ugly gstreamer1.0-libav ffmpeg
+                pkexec apt install -y gstreamer1.0-plugins-bad gstreamer1.0-plugins-ugly gstreamer1.0-libav ffmpeg
             fi
             ;;
         arch)
-            sudo pacman -S --needed ffmpeg gstreamer gst-plugins-base gst-plugins-good gst-plugins-bad gst-plugins-ugly gst-libav
+            pkexec pacman -S --needed ffmpeg gstreamer gst-plugins-base gst-plugins-good gst-plugins-bad gst-plugins-ugly gst-libav
             ;;
     esac
 }
