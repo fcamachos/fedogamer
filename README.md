@@ -1,4 +1,4 @@
-# FedoGamer
+# FedoGamer (¡¡Experimental!!)
 
 Este es un script realizado con la finalidad de facilitar el acceso de los que emigran de Windows a Linux buscando potenciar su experiencia de juego. 
 
