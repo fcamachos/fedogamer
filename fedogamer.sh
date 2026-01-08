@@ -3,7 +3,6 @@
 # Gaming Setup Script con Interfaz Gráfica (Zenity)
 # Inspirado en el uso de whiptail/zenity
 # Soporta Fedora, Debian/Ubuntu, Arch/Manjaro
-# https://github.com/fcamachos
 
 # Colores (para terminal)
 RED='\033[0;31m'
@@ -32,7 +31,9 @@ fi
 zenity --info --width=500 --title="FedoGamer Setup" --text="
 <b>¡Bienvenido al instalador gaming para Linux!</b>
 
-Este script te ayudará a preparar tu sistema para jugar con <b>Steam</b> y <b>Lutris</b>.
+Este script te ayudará a preparar tu sistema para jugar con <b>Steam</b> y <b>Lutris</b>, 
+y ahora también incluye codecs multimedia para reproducir MP4 y otros formatos.
+
 Se detectará automáticamente tu distribución.
 
 <i>Requiere privilegios sudo y conexión a internet.</i>"
@@ -55,7 +56,7 @@ fi
 zenity --info --text="Distribución detectada: <b>$DISTRO</b>"
 
 # Checklist de opciones
-SELECCION=$(zenity --list --checklist --width=800 --height=600 \
+SELECCION=$(zenity --list --checklist --width=800 --height=650 \
     --title="Selecciona lo que quieres instalar/configurar" \
     --text="Marca las opciones deseadas (puedes elegir varias):" \
     --column="Seleccionar" --column="Opción" --column="Descripción" \
@@ -66,6 +67,7 @@ SELECCION=$(zenity --list --checklist --width=800 --height=600 \
     TRUE "Dependencias 32-bit" "Bibliotecas esenciales para juegos Windows" \
     TRUE "Steam y herramientas" "Instalar Steam + herramientas gaming (Heroic, ProtonUp-Qt, etc.)" \
     TRUE "Optimizaciones sistema" "GameMode, límites de recursos y parámetros kernel" \
+    TRUE "Codecs multimedia" "Instalar codecs para MP4, MP3, AVI, MKV, etc. (GStreamer + FFmpeg)" \
     FALSE "Configurar Wine con winetricks" "Instalar VCRedist, .NET, DirectX, fonts (puede tardar mucho)" \
     --separator=":")
 
@@ -77,12 +79,33 @@ fi
 # Convertir selección a array
 IFS=":" read -ra OPCIONES <<< "$SELECCION"
 
-# Función para ejecutar con progreso
-ejecutar_con_progreso() {
-    "$@" | zenity --progress --pulsate --auto-close --width=500 --title="Instalando..." --text="$1"
+# === NUEVA FUNCIÓN PARA CODECS MULTIMEDIA ===
+install_multimedia_codecs() {
+    zenity --info --text="Instalando codecs multimedia (MP4/H.264, MP3, etc.)..."
+    case "$DISTRO" in
+        fedora)
+            # Comandos recomendados por RPM Fusion para codecs completos
+            sudo dnf swap ffmpeg-free ffmpeg --allowerasing -y
+            sudo dnf install -y gstreamer1-plugins-{bad-\*,good-\*,base,ugly-\*} gstreamer1-plugin-openh264 gstreamer1-libav ffmpeg lame-libs --exclude=gstreamer1-plugins-bad-free-devel
+            sudo dnf group upgrade --with-optional Multimedia -y
+            ;;
+        debian)
+            sudo apt update
+            # Para Ubuntu: ubuntu-restricted-extras incluye la mayoría
+            # Para Debian puro: paquetes equivalentes
+            if command -v ubuntu-drivers >/dev/null 2>&1; then
+                sudo apt install -y ubuntu-restricted-extras
+            else
+                sudo apt install -y gstreamer1.0-plugins-bad gstreamer1.0-plugins-ugly gstreamer1.0-libav ffmpeg
+            fi
+            sudo apt install -y libavcodec-extra libdvd-pkg
+            sudo dpkg-reconfigure libdvd-pkg
+            ;;
+        arch)
+            sudo pacman -S --needed ffmpeg gstreamer gst-plugins-base gst-plugins-good gst-plugins-bad gst-plugins-ugly gst-libav
+            ;;
+    esac
 }
-
-# === FUNCIONES DE INSTALACIÓN (casi idénticas a tu original, solo simplificadas donde posible) ===
 
 setup_repositories() {
     zenity --info --text="Configurando repositorios adicionales..."
@@ -93,7 +116,7 @@ setup_repositories() {
             flatpak remote-add --if-not-exists flathub https://flathub.org/repo/flathub.flatpakrepo
             ;;
         debian)
-            sudo sed -i 's/main$/main contrib non-free/' /etc/apt/sources.list
+            sudo sed -i 's/main$/main contrib non-free non-free-firmware/' /etc/apt/sources.list
             sudo apt update
             ;;
         arch)
@@ -103,72 +126,6 @@ setup_repositories() {
             fi
             ;;
     esac
-}
-
-install_wine() {
-    zenity --info --text="Instalando Wine y dependencias..."
-    case "$DISTRO" in
-        fedora) sudo dnf install -y wine winetricks ;;
-        debian) sudo apt install -y --install-recommends winehq-stable winetricks ;;
-        arch) sudo pacman -S --needed wine wine-gecko wine-mono winetricks ;;
-    esac
-}
-
-install_lutris() {
-    zenity --info --text="Instalando Lutris..."
-    case "$DISTRO" in
-        fedora|debian) sudo ${DISTRO == fedora && echo dnf || echo apt install} -y lutris ;;
-        arch) sudo pacman -S --needed lutris ;;
-    esac
-}
-
-install_graphics_libraries() {
-    zenity --info --text="Instalando drivers gráficos y herramientas gaming..."
-    case "$DISTRO" in
-        fedora)
-            sudo dnf install -y mesa-vulkan-drivers vulkan-loader vulkan-tools gamemode mangohud dxvk steam-devices
-            ;;
-        debian)
-            sudo dpkg --add-architecture i386
-            sudo apt update
-            sudo apt install -y mesa-vulkan-drivers vulkan-tools gamemode mangohud
-            ;;
-        arch)
-            sudo pacman -S --needed lib32-mesa vulkan-icd-loader lib32-vulkan-icd-loader gamemode lib32-gamemode mangohud lib32-mangohud
-            ;;
-    esac
-}
-
-install_wine_dependencies() {
-    zenity --info --text="Instalando bibliotecas 32-bit esenciales..."
-    # (Mantengo tu código original resumido)
-    case "$DISTRO" in
-        fedora) sudo dnf install -y glibc.i686 libstdc++.i686 alsa-lib.i686 pulseaudio-libs.i686 cabextract ;;
-        debian) sudo apt install -y libc6:i386 libstdc++6:i386 cabextract ;;
-        arch) sudo pacman -S --needed lib32-glibc lib32-gcc-libs lib32-alsa-lib cabextract ;;
-    esac
-}
-
-install_gaming_tools() {
-    zenity --info --text="Instalando Steam y herramientas adicionales..."
-    case "$DISTRO" in
-        fedora) sudo dnf install -y steam discord flatpak; flatpak install -y flathub com.heroicgameslauncher.hgl net.davidotek.pupgui2 ;;
-        debian) sudo apt install -y steam ;;
-        arch) sudo pacman -S --needed steam discord; ;;
-    esac
-}
-
-configure_system_optimizations() {
-    zenity --info --text="Aplicando optimizaciones del sistema..."
-    sudo groupadd -r gamemode 2>/dev/null || true
-    sudo usermod -aG gamemode "$USER"
-    # (tus configs de limits y sysctl)
-}
-
-configure_wine_with_winetricks() {
-    zenity --question --text="Esto puede tardar mucho tiempo. ¿Continuar con la configuración avanzada de Wine?" || return
-    export WINEPREFIX="$HOME/.wine"
-    winetricks -q vcrun2019 dotnet48 corefonts d3dx9
 }
 
 # === EJECUCIÓN DE OPCIONES SELECCIONADAS ===
@@ -181,6 +138,7 @@ for opcion in "${OPCIONES[@]}"; do
         "Dependencias 32-bit") install_wine_dependencies ;;
         "Steam y herramientas") install_gaming_tools ;;
         "Optimizaciones sistema") configure_system_optimizations ;;
+        "Codecs multimedia") install_multimedia_codecs ;;
         "Configurar Wine con winetricks") configure_wine_with_winetricks ;;
     esac
 done
@@ -193,13 +151,14 @@ Software principal instalado:
 ✓ Wine / Lutris / Steam
 ✓ Drivers Vulkan y herramientas gaming
 ✓ Bibliotecas compatibilidad
+✓ <b>Codecs multimedia (MP4, MP3, etc.)</b>
 
 <b>Pasos siguientes recomendados:</b>
-1. <b>Reinicia el sistema</b> para aplicar optimizaciones.
+1. <b>Reinicia el sistema</b> para aplicar los cambios.
 2. Abre Lutris y conecta tus cuentas.
-3. Instala juegos desde Lutris o Steam.
+3. Prueba reproducir un vídeo MP4 con tu reproductor favorito (Totem, VLC, etc.).
 4. Usa ProtonUp-Qt (si instalaste) para versiones GE de Proton.
 
-<i>¡Disfruta gaming en Linux! 🎮</i>"
+<i>¡Disfruta gaming y multimedia en Linux! 🎮🎥</i>"
 
 exit 0
