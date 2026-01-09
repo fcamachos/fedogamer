@@ -1,13 +1,13 @@
 #!/bin/bash
 
 # =================================================================
-# FedoGamer Script 
+# Gaming Setup Script Pro - Versión Estabilizada (Sudo Único)
 # =================================================================
 
-# 1. Asegurar entorno gráfico
-export DISPLAY=${DISPLAY:-:0}
+# Variable para identificar si ya estamos corriendo dentro de una terminal
+INTERNAL_FLAG="$1"
 
-# 2. Detección de Distribución (Necesaria para instalar Zenity si falta)
+# 1. DETECCIÓN DE DISTRIBUCIÓN
 check_distro() {
     if [ -f /etc/fedora-release ]; then echo "fedora"
     elif [ -f /etc/debian_version ]; then echo "debian"
@@ -16,33 +16,47 @@ check_distro() {
 }
 DISTRO=$(check_distro)
 
-# 3. Wrapper de Terminal y Auto-instalación de Zenity
-# Si no hay terminal o falta Zenity, forzamos la apertura de una terminal.
-if [ -z "$TERM" ] || ! command -v zenity >/dev/null 2>&1; then
-    # Si estamos aquí, es porque se hizo doble click o falta la herramienta GUI
+# 2. LANZADOR DE TERMINAL Y AUTENTICACIÓN
+# Si se hace doble click (no hay terminal) o si no se ha pasado el flag interno
+if [ "$INTERNAL_FLAG" != "--child" ]; then
     for term in gnome-terminal konsole xfce4-terminal alacritty xterm; do
         if command -v $term >/dev/null 2>&1; then
-            # Si falta zenity, lo instalamos primero en la terminal
-            if ! command -v zenity >/dev/null 2>&1; then
-                exec $term -e "bash -c \"
-                    echo 'Instalando dependencia necesaria: zenity...';
-                    case $DISTRO in
-                        fedora) sudo dnf install -y zenity ;;
-                        debian) sudo apt update && sudo apt install -y zenity ;;
-                        arch)   sudo pacman -S --needed --noconfirm zenity ;;
-                    esac;
-                    bash \$0;\""
-                exit 0
-            else
-                # Si zenity ya está pero se ejecutó por doble click, abrimos terminal para logs
-                exec $term -e "bash \"$0\""
-                exit 0
-            fi
+            # Lanzamos la terminal y le pedimos que ejecute este mismo script con el flag --child
+            exec $term -e bash "$0" --child
+            exit 0
         fi
     done
+    # Si no hay terminal disponible, intentamos seguir (podría fallar pkexec)
 fi
 
-# --- A PARTIR DE AQUÍ, ZENITY ESTÁ GARANTIZADO ---
+# 3. INSTALACIÓN DE ZENITY Y SUDO (Dentro de la terminal ya abierta)
+if [ "$INTERNAL_FLAG" == "--child" ]; then
+    echo "=== Iniciando Entorno de Instalación ==="
+
+    # Verificar Zenity
+    if ! command -v zenity >/dev/null 2>&1; then
+        echo "Instalando dependencia necesaria (zenity)..."
+        case $DISTRO in
+            fedora) sudo dnf install -y zenity ;;
+            debian) sudo apt update && sudo apt install -y zenity ;;
+            arch)   sudo pacman -S --needed --noconfirm zenity ;;
+        esac
+    fi
+
+    # Pedir sudo una sola vez
+    echo "Por favor, ingresa tu contraseña para autorizar la configuración:"
+    if sudo -v; then
+        # Mantener sudo vivo en segundo plano
+        (while true; do sudo -n true; sleep 60; kill -0 "$$" || exit; done) 2>/dev/null &
+        echo "Autenticación exitosa."
+    else
+        echo "Error de autenticación. Cerrando..."
+        sleep 3
+        exit 1
+    fi
+fi
+
+# --- A PARTIR DE AQUÍ, ZENITY Y SUDO ESTÁN DISPONIBLES ---
 
 PROGRESS_FIFO="/tmp/gaming_setup_$$.fifo"
 CURRENT_USER=$(logname 2>/dev/null || echo "$USER")
@@ -50,7 +64,6 @@ TOTAL_STEPS=0
 CURRENT_STEP=0
 
 cleanup() {
-    echo "Finalizando procesos..."
     [ -e "$PROGRESS_FIFO" ] && rm -f "$PROGRESS_FIFO"
     exec 3>&- 2>/dev/null
     pkill -P $$ zenity 2>/dev/null
@@ -60,13 +73,7 @@ trap cleanup EXIT
 start_progress_ui() {
     mkfifo "$PROGRESS_FIFO"
     exec 3<> "$PROGRESS_FIFO"
-
-    zenity --progress \
-        --title="Gaming Setup" \
-        --text="Preparando..." \
-        --percentage=0 \
-        --auto-close \
-        --width=450 --no-cancel <&3 &
+    zenity --progress --title="Gaming Setup" --text="Iniciando..." --percentage=0 --auto-close --width=450 --no-cancel <&3 &
 }
 
 update_ui() {
@@ -74,7 +81,7 @@ update_ui() {
     local msg=$2
     echo "$percent" >&3
     echo "# $msg" >&3
-    echo -e "[GUI] $percent% - $msg"
+    echo -e "[LOG] $percent% - $msg"
 }
 
 run_step() {
@@ -84,15 +91,11 @@ run_step() {
     local percent=$(( (CURRENT_STEP * 100) / TOTAL_STEPS ))
     update_ui "$percent" "$desc"
 
-    # Ejecución con pkexec para mantener el flujo gráfico de contraseñas
-    if [[ "$cmd" == *"dnf"* || "$cmd" == *"apt"* || "$cmd" == *"pacman"* || "$cmd" == *"usermod"* || "$cmd" == *"sed"* ]]; then
-        pkexec bash -c "$cmd"
-    else
-        bash -c "$cmd"
-    fi
+    # Ejecutamos con sudo (no pedirá clave por el keep-alive anterior)
+    sudo bash -c "$cmd"
 }
 
-# --- INTERFAZ PRINCIPAL ---
+# --- INTERFAZ DE SELECCIÓN ---
 
 if [ "$DISTRO" == "unknown" ]; then
     zenity --error --text="Distribución no soportada."
@@ -127,8 +130,8 @@ for opt in "${PASOS[@]}"; do
             esac ;;
         "WINE")
             case "$DISTRO" in
-                fedora) run_step "dnf install -y wine winetricks glibc.i686" "Instalando Wine y base 32-bit" ;;
-                debian) run_step "dpkg --add-architecture i386 && apt update && apt install -y wine winetricks" "Instalando Wine y base 32-bit" ;;
+                fedora) run_step "dnf install -y wine winetricks glibc.i686" "Instalando Wine" ;;
+                debian) run_step "dpkg --add-architecture i386 && apt update && apt install -y wine winetricks" "Instalando Wine" ;;
                 arch)   run_step "pacman -S --needed --noconfirm wine winetricks lib32-glibc" "Instalando Wine" ;;
             esac ;;
         "LUTRIS")
@@ -139,15 +142,15 @@ for opt in "${PASOS[@]}"; do
             esac ;;
         "DRIVERS")
             case "$DISTRO" in
-                fedora) run_step "dnf install -y mesa-vulkan-drivers vulkan-loader gamemode mangohud" "Drivers y Optimización" ;;
-                debian) run_step "apt install -y mesa-vulkan-drivers gamemode mangohud" "Drivers y Optimización" ;;
-                arch)   run_step "pacman -S --needed --noconfirm vulkan-icd-loader lib32-vulkan-icd-loader gamemode mangohud" "Drivers y Optimización" ;;
+                fedora) run_step "dnf install -y mesa-vulkan-drivers vulkan-loader gamemode mangohud" "Drivers/Optimización" ;;
+                debian) run_step "apt install -y mesa-vulkan-drivers gamemode mangohud" "Drivers/Optimización" ;;
+                arch)   run_step "pacman -S --needed --noconfirm vulkan-icd-loader lib32-vulkan-icd-loader gamemode mangohud" "Drivers/Optimización" ;;
             esac ;;
         "STEAM")
             case "$DISTRO" in
-                fedora) run_step "dnf install -y steam discord" "Instalando Steam y Discord" ;;
+                fedora) run_step "dnf install -y steam discord" "Instalando Steam/Discord" ;;
                 debian) run_step "apt install -y steam" "Instalando Steam" ;;
-                arch)   run_step "pacman -S --needed --noconfirm steam discord" "Instalando Steam y Discord" ;;
+                arch)   run_step "pacman -S --needed --noconfirm steam discord" "Instalando Steam/Discord" ;;
             esac ;;
         "CODECS")
             case "$DISTRO" in
@@ -158,8 +161,7 @@ for opt in "${PASOS[@]}"; do
     esac
 done
 
-update_ui 100 "¡Todo listo!"
+update_ui 100 "¡Instalación completa!"
 sleep 2
-zenity --info --title="Completado" --text="Configuración finalizada.\nSe recomienda reiniciar para aplicar cambios de drivers." --width=300
-
+zenity --info --title="Éxito" --text="El proceso ha terminado correctamente." --width=300
 exit 0
